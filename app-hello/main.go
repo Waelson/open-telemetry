@@ -5,36 +5,38 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
+	"time"
 
-	"go.opentelemetry.io/otel/sdk/resource"
+	resource2 "go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func initTracerAuto() func(context.Context) error {
 
-	exporter, err := otlptrace.New(
-		context.Background(),
-		otlptracegrpc.NewClient(
-			otlptracegrpc.WithInsecure(),
-			otlptracegrpc.WithEndpoint("otel-collector:4317"),
-		),
-	)
+	client := otlptracegrpc.NewClient(
+		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithEndpoint("otel-collector:4317"))
+
+	exporter, err := otlptrace.New(context.Background(), client)
 
 	if err != nil {
 		log.Fatal("Could not set exporter: ", err)
 	}
-	resources, err := resource.New(
+	resources, err := resource2.New(
 		context.Background(),
-		resource.WithAttributes(
+		resource2.WithAttributes(
 			attribute.String("service.name", "hello-service"),
 			attribute.String("application", "app-hello"),
 		),
@@ -51,29 +53,39 @@ func initTracerAuto() func(context.Context) error {
 			sdktrace.WithResource(resources),
 		),
 	)
+
 	return exporter.Shutdown
 }
 
 func main() {
 
+	rand.Seed(time.Now().UnixNano())
+
 	cleanup := initTracerAuto()
 	defer cleanup(context.Background())
 
-	tracer := otel.Tracer("demo1TracerName")
-
 	otel.SetTextMapPropagator(propagation.TraceContext{})
+	tracer := otel.Tracer("app-hello")
 
 	r := gin.Default()
 	r.Use(otelgin.Middleware("hello-service"))
 
-	r.GET("/", func(c *gin.Context) {
-		ctx := context.Background()
+	r.GET("/api/v1/greeting", func(c *gin.Context) {
+		ctx := baggage.ContextWithoutBaggage(c.Request.Context())
 		nome, err := getNome(ctx, tracer)
+
 		if err != nil {
 			c.String(500, "Erro ao obter o nome")
 			return
 		}
-		c.String(200, fmt.Sprintf("Ola, %s", nome))
+
+		email, err := getEmail(ctx, tracer)
+		if err != nil {
+			c.String(500, "Erro ao obter o email")
+			return
+		}
+
+		c.String(200, fmt.Sprintf("Ola, %s (%s)", nome, email))
 	})
 
 	// Run the server
@@ -81,23 +93,15 @@ func main() {
 }
 
 func getNome(ctx context.Context, tracer trace.Tracer) (string, error) {
-	ctx, parentSpan := tracer.Start(
-		ctx,
-		"get_nome",
-		trace.WithAttributes(attribute.String("parentAttributeKey1", "parentAttributeValue1")))
+	ctx, span := tracer.Start(ctx, "getNome")
+	defer span.End()
 
-	parentSpan.AddEvent("get_nome-event")
-	log.Printf("In parent span, before calling a child function.")
+	t := rand.Intn(9) + 1
+	time.Sleep(time.Duration(t) * time.Millisecond)
 
-	defer parentSpan.End()
-
-	//
-	req, _ := http.NewRequest("GET", "http://app-user:8081/", nil)
-	cont := req.Context()
-	propagator := otel.GetTextMapPropagator()
-	propagator.Inject(cont, propagation.HeaderCarrier(req.Header))
-
-	resp, err := http.DefaultClient.Do(req)
+	clientHttp := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://app-user:8081/api/v1/person", nil)
+	resp, err := clientHttp.Do(req)
 	if err != nil {
 		log.Fatalf("Erro ao fazer a requisição: %v", err)
 		return "", err
@@ -113,5 +117,33 @@ func getNome(ctx context.Context, tracer trace.Tracer) (string, error) {
 	bodyString := string(bodyBytes)
 
 	return bodyString, nil
-	
+
+}
+
+func getEmail(ctx context.Context, tracer trace.Tracer) (string, error) {
+	ctx, span := tracer.Start(ctx, "getEmail")
+	defer span.End()
+
+	t := rand.Intn(9) + 1
+	time.Sleep(time.Duration(t) * time.Millisecond)
+
+	clientHttp := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://app-email:8082/api/v1/email", nil)
+	resp, err := clientHttp.Do(req)
+	if err != nil {
+		log.Fatalf("Erro ao fazer a requisição: %v", err)
+		return "", err
+	}
+	defer resp.Body.Close() // Não esqueça de fechar o corpo da resposta!
+
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Erro ao ler o corpo da resposta: %v", err)
+		return "", err
+	}
+
+	bodyString := string(bodyBytes)
+
+	return bodyString, nil
+
 }

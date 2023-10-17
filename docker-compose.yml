@@ -19,6 +19,15 @@ services:
     depends_on:
       - otel-collector
 
+  app-email:
+    build:
+      context: app-email
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    depends_on:
+      - otel-collector
+
   zipkin:
     image: openzipkin/zipkin:latest
     restart: always

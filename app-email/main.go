@@ -34,8 +34,8 @@ func initTracerAuto() func(context.Context) error {
 	resources, err := resource.New(
 		context.Background(),
 		resource.WithAttributes(
-			attribute.String("service.name", "user-service"),
-			attribute.String("application", "app-user"),
+			attribute.String("service.name", "email-service"),
+			attribute.String("application", "app-email"),
 		),
 	)
 	if err != nil {
@@ -55,22 +55,21 @@ func initTracerAuto() func(context.Context) error {
 }
 
 func main() {
-
 	rand.Seed(time.Now().UnixNano())
 
 	cleanup := initTracerAuto()
 	defer cleanup(context.Background())
 
 	r := gin.Default()
-	r.Use(otelgin.Middleware("app-user"))
+	r.Use(otelgin.Middleware("app-email"))
 
-	r.GET("/api/v1/person", func(c *gin.Context) {
+	r.GET("/api/v1/email", func(c *gin.Context) {
 		t := rand.Intn(9) + 1
 		time.Sleep(time.Duration(t) * time.Millisecond)
-		fullname := fake.FullName()
-		c.String(200, fullname)
+		email := fake.EmailAddress()
+		c.String(200, email)
 	})
 
 	// Run the server
-	r.Run(":8081")
+	r.Run(":8082")
 }
