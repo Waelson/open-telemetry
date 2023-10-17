@@ -1,24 +1,24 @@
 # Open Telemetry
 Este repositório contém exemplos de configuração do Otel Collector para entrega de dados ao Zipkin e Jeager. Além de código exemplo de aplicações escritas em Golang.
 
-#Pré Requisitos
+## Pré Requisitos
 Possuir as ferramentas abaixo:
 - Docker
 - Go 1.21
 
-#Como executar?
+## Como executar?
 Na raiz do projeto execute o comando abaixo:
 ```
  docker-compose up --build
 ```
 
-#Gerando requisições
+## Gerando requisições
 Para visualizar o tracing gerado pela aplicação é necessário gerar algumas requisições no endereço abaixo:
 ```
 curl http://localhost:8080/api/v1/greeting
 ```
 
-#Visualizando o tracing
+## Visualizando o tracing
 ### Zipkin
 Acesse o browser no endereço abaixo
 ```
@@ -30,7 +30,7 @@ Acesse o browser com o endereço abaixo:
 http://localhost:16686/
 ```
 
-#Screenshots
+## Screenshots
 ### Zipkin
 <img src="images/zipkin1.png"/>
 <img src="images/zipkin2.png"/>
